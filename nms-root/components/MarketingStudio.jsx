@@ -2946,7 +2946,7 @@ function Toggle({checked, onChange}){
   return <div className={`toggle ${checked?"on":""}`} onClick={()=>onChange(!checked)}><div className="toggle-knob"/></div>;
 }
 
-function ClientSettingsView({ client, globalMeta, projects, onUpdate, onAddProject, onSelectProject, onClose }){
+function ClientSettingsView({ client, globalMeta, projects, onUpdate, onAddProject, onSelectProject, onDeleteProject, onClose }){
   const [tab,   setTab]   = useState("anagrafica");
   const [f,     setF]     = useState({...client});
   const [copied,setCopied]= useState(false);
@@ -3096,17 +3096,23 @@ function ClientSettingsView({ client, globalMeta, projects, onUpdate, onAddProje
               const tot=SECTIONS_PDM.length+SECTIONS_PDC.length;
               const pct=Math.round(((pdmF+pdcF)/tot)*100);
               return(
-                <div key={proj.id} className="cs-proj-row" onClick={()=>onSelectProject(proj.id)}>
-                  <div style={{flex:1}}>
+                <div key={proj.id} className="cs-proj-row" style={{position:"relative"}}>
+                  <div style={{flex:1,cursor:"pointer"}} onClick={()=>onSelectProject(proj.id)}>
                     <div style={{fontWeight:600,fontSize:13}}>{proj.name}</div>
                     <div style={{fontSize:10,color:"var(--ink4)",marginTop:2}}>{new Date(proj.createdAt).toLocaleDateString("it-IT")}</div>
                     <div className="dc-bar" style={{marginTop:6,width:180}}><div className="dc-fill" style={{width:pct+"%"}}/></div>
                   </div>
-                  <div style={{textAlign:"right"}}>
+                  <div style={{textAlign:"right",cursor:"pointer"}} onClick={()=>onSelectProject(proj.id)}>
                     <div style={{fontSize:11,fontWeight:700,color:"var(--gold)"}}>{pct}%</div>
                     <div style={{fontSize:10,color:"var(--ink4)"}}>{pdmF+pdcF}/{tot} sez.</div>
                   </div>
-                  <div style={{color:"var(--gold)",fontSize:16}}>→</div>
+                  <div style={{color:"var(--gold)",fontSize:16,cursor:"pointer"}} onClick={()=>onSelectProject(proj.id)}>→</div>
+                  <button
+                    onClick={e=>{e.stopPropagation(); if(window.confirm(`Eliminare il progetto "${proj.name}"? Questa azione è irreversibile.`)) onDeleteProject(proj.id);}}
+                    style={{marginLeft:10,background:"none",border:"1px solid #FCA5A5",borderRadius:6,color:"#EF4444",fontSize:11,padding:"3px 8px",cursor:"pointer",flexShrink:0}}
+                    title="Elimina progetto">
+                    🗑
+                  </button>
                 </div>
               );
             })}
@@ -5141,6 +5147,12 @@ export default function App(){
     persist(ps,cs,proj.id); setActiveId(proj.id); navigate("project",proj.id);
   }
   function addProjectToClient(cid){ setActiveClientId(cid); navigate("wizard"); }
+  async function handleDeleteProject(id){
+    const ps=projects.filter(p=>p.id!==id);
+    const cs=clients.map(c=>({...c,projectIds:(c.projectIds||[]).filter(pid=>pid!==id)}));
+    await persist(ps,cs,activeId===id?null:activeId);
+    if(activeId===id) navigate("client",activeClientId);
+  }
   function addNewClient(){ const c=emptyClient(); const cs=[...clients,c]; setClients(cs); save({projects,clients:cs,activeId}); setActiveClientId(c.id); setExpandedClients(ex=>[...ex,c.id]); navigate("client",c.id); }
 
   const activeProj   = projects.find(p=>p.id===activeId);
@@ -5218,6 +5230,7 @@ export default function App(){
             onUpdate={handleClientUpdate}
             onAddProject={addProjectToClient}
             onSelectProject={handleSelect}
+            onDeleteProject={handleDeleteProject}
             onClose={handleBack}
           />
         )}
