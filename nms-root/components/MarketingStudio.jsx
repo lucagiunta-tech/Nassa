@@ -1898,14 +1898,14 @@ async function callClaude(prompt, maxTokens=1000) {
   let attempts = 0;
   while (true) {
     try {
-      const r = await fetch("https://api.anthropic.com/v1/messages", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:maxTokens,
-          messages:[{role:"user",content:prompt}] })
+      const r = await fetch("/api/claude", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: [{ role: "user", content: prompt }], max_tokens: maxTokens }),
       });
       const d = await r.json();
-      return d.content?.map(b=>b.text||"").join("") || "";
+      if (d.error) throw new Error(d.error);
+      return d.content || "";
     } catch(e) { attempts++; if(attempts>=2) throw e; await new Promise(r=>setTimeout(r,1500)); }
   }
 }
