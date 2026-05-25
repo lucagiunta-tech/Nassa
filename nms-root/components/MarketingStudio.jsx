@@ -2546,7 +2546,7 @@ function EdSectionContent({project, secId, onUpdate, globalMeta}){
     <div className="sec-body">
       <div className="sec-body-hdr"><div className="sec-body-title" style={{borderLeft:`3px solid ${gc}`,paddingLeft:12}}>Feed</div></div>
       <div className="sec-content" style={{padding:0,overflow:"hidden",display:"flex",flexDirection:"column"}}>
-        <FeedED project={project} onUpdate={onUpdate} globalMeta={effectiveMeta}/>
+        <FeedED project={project} onUpdate={onUpdate} globalMeta={globalMeta}/>
       </div>
     </div>
   );
@@ -2560,7 +2560,7 @@ function EdSectionContent({project, secId, onUpdate, globalMeta}){
   if(secId==="publishing") return(
     <div className="sec-body">
       <div className="sec-body-hdr"><div className="sec-body-title" style={{borderLeft:`3px solid ${gc}`,paddingLeft:12}}>{curSec?.label}</div></div>
-      <div className="sec-content"><PublishingHubED project={project} onUpdate={onUpdate} globalMeta={effectiveMeta}/></div>
+      <div className="sec-content"><PublishingHubED project={project} onUpdate={onUpdate} globalMeta={globalMeta}/></div>
     </div>
   );
   if(secId==="perf_log") return(
@@ -5001,7 +5001,7 @@ function ProjectView({project, onUpdate, onBack, globalMeta}){
       {/* SECTION CONTENT — nascosto in overview */}
       {module!=="overview"&&(
         module==="ed"
-          ? <EdSectionContent key={"ed-"+sec} project={project} secId={sec} onUpdate={onUpdate} globalMeta={effectiveMeta}/>
+          ? <EdSectionContent key={"ed-"+sec} project={project} secId={sec} onUpdate={onUpdate} globalMeta={globalMeta}/>
           : <SectionContent   key={module+"-"+sec} project={project} module={module} secId={sec} onUpdate={onUpdate}/>
       )}
     </div>
@@ -5057,29 +5057,56 @@ function Dashboard({projects, onSelect, onNew}){
 }
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
+// ── URL hash routing helpers ──────────────────────────────────────────────────
+function parseHash(){
+  const h=(window.location.hash||"").replace(/^#\/?/,"");
+  if(!h||h==="dashboard") return {view:"dashboard",id:null};
+  const parts=h.split("/"); return {view:parts[0]||"dashboard",id:parts[1]||null};
+}
+function pushHash(view,id){
+  const h=id?`#/${view}/${id}`:`#/${view}`;
+  if(window.location.hash!==h) window.history.pushState(null,"",h);
+}
+
 export default function App(){
   const [projects,setProjects]=useState([]);
   const [clients, setClients] =useState([]);
   const [activeId,setActiveId]=useState(null);
   const [activeClientId,setActiveClientId]=useState(null);
   const [expandedClients,setExpandedClients]=useState([]);
-  const [view,setView]=useState("dashboard");
+  const [view,setView]=useState(()=>parseHash().view||"dashboard");
   const [loaded,setLoaded]=useState(false);
   const [globalMeta,setGlobalMeta]=useState(null);
+
+  // Back/forward browser buttons
+  useEffect(()=>{
+    function onPop(){
+      const {view:v,id}=parseHash();
+      setView(v);
+      if(v==="project"&&id) setActiveId(id);
+      if(v==="client"&&id) setActiveClientId(id);
+    }
+    window.addEventListener("popstate",onPop);
+    return ()=>window.removeEventListener("popstate",onPop);
+  },[]);
+
+  function navigate(v,id){ setView(v); pushHash(v,id); }
 
   useEffect(()=>{
     load().then(async d=>{
       const gm=await loadGlobalMeta(); setGlobalMeta(gm);
       if(d&&(d.projects?.length>0||d.clients?.length>0)){
         setProjects(d.projects||[]); setClients(d.clients||[]);
-        setActiveId(d.activeId||null);
+        const {view:urlView,id:urlId}=parseHash();
+        if(urlView==="project"&&urlId){ setActiveId(urlId); }
+        else if(d.activeId){ setActiveId(d.activeId); }
       } else {
         const {client,project}=createKosmetikal();
         setProjects([project]); setClients([client]);
         setActiveId(project.id); setActiveClientId(client.id);
         setExpandedClients([client.id]);
         save({projects:[project],clients:[client],activeId:project.id});
-        setView("project");
+        navigate("project",project.id);
       }
       setLoaded(true);
     });
@@ -5095,25 +5122,26 @@ export default function App(){
   async function handleClientUpdate(upd){ const cs=clients.map(c=>c.id===upd.id?upd:c); setClients(cs); await save({projects,clients:cs,activeId}); }
 
   function handleSelect(id){
-    setActiveId(id); setView("project");
+    setActiveId(id);
     const proj=projects.find(p=>p.id===id);
     if(proj?.clientId) setActiveClientId(proj.clientId);
+    navigate("project",id);
     persist(projects,clients,id);
   }
-  function handleBack(){ setView("dashboard"); persist(projects,clients,null); }
+  function handleBack(){ navigate("dashboard"); persist(projects,clients,null); }
   function toggleExpand(id){ setExpandedClients(ex=>ex.includes(id)?ex.filter(e=>e!==id):[...ex,id]); }
-  function openClient(id){ setActiveClientId(id); setView("client"); }
-  function openPortal(id){ setActiveClientId(id); setView("portal"); }
+  function openClient(id){ setActiveClientId(id); navigate("client",id); }
+  function openPortal(id){ setActiveClientId(id); navigate("portal",id); }
 
   function handleWizardComplete(iv){
     const name=iv.nome||(iv.settore?`Piano ${iv.settore}`:("Progetto "+new Date().toLocaleDateString("it-IT")));
     const proj={id:uid(),clientId:activeClientId||null,name,createdAt:Date.now(),interview:iv,context:buildCtx(iv),pdm:{sections:{}},pdc:{sections:{}},ed:{sections:{},contentItems:[],campagne:[],calendarEvents:[],perfLogs:[],feedItems:[]},tasks:[],milestones:[],budget:{produzione:[],ads:{linkedin:0,google:0,meta:0,altri:0},note:""}};
     const ps=[...projects,proj];
     const cs=clients.map(c=>c.id===activeClientId?{...c,projectIds:[...(c.projectIds||[]),proj.id]}:c);
-    persist(ps,cs,proj.id); setActiveId(proj.id); setView("project");
+    persist(ps,cs,proj.id); setActiveId(proj.id); navigate("project",proj.id);
   }
-  function addProjectToClient(cid){ setActiveClientId(cid); setView("wizard"); }
-  function addNewClient(){ const c=emptyClient(); const cs=[...clients,c]; setClients(cs); save({projects,clients:cs,activeId}); setActiveClientId(c.id); setExpandedClients(ex=>[...ex,c.id]); setView("client"); }
+  function addProjectToClient(cid){ setActiveClientId(cid); navigate("wizard"); }
+  function addNewClient(){ const c=emptyClient(); const cs=[...clients,c]; setClients(cs); save({projects,clients:cs,activeId}); setActiveClientId(c.id); setExpandedClients(ex=>[...ex,c.id]); navigate("client",c.id); }
 
   const activeProj   = projects.find(p=>p.id===activeId);
   const activeClient = clients.find(c=>c.id===activeClientId);
@@ -5172,7 +5200,7 @@ export default function App(){
 
         <div className="sb-bottom">
           <GlobalMetaConnect globalMeta={effectiveMeta} onMetaChange={handleMetaChange}/>
-          <button className={`sb-planner-btn ${view==="planner"?"active":""}`} onClick={()=>setView("planner")}>🗓️ Team Planner</button>
+          <button className={`sb-planner-btn ${view==="planner"?"active":""}`} onClick={()=>navigate("planner")}>🗓️ Team Planner</button>
         </div>
       </div>
 
@@ -5194,11 +5222,11 @@ export default function App(){
           />
         )}
         {view==="portal"&&activeClient&&(
-          <ClientPortalPreview client={activeClient} projects={projects} onBack={()=>setView("client")} onUpdateProject={handleUpdate}/>
+          <ClientPortalPreview client={activeClient} projects={projects} onBack={()=>navigate("client",activeClientId)} onUpdateProject={handleUpdate}/>
         )}
         {view==="planner"&&(
           <div className="planner-view">
-            <div className="pv-topbar"><button className="pv-back" onClick={()=>setView("dashboard")}>← Clienti</button><div className="pv-name">Team Planner</div></div>
+            <div className="pv-topbar"><button className="pv-back" onClick={()=>navigate("dashboard")}>← Clienti</button><div className="pv-name">Team Planner</div></div>
             <div style={{flex:1,overflow:"auto",padding:"20px 32px"}}><TeamPlannerNMS projects={projects}/></div>
           </div>
         )}
