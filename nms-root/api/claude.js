@@ -34,7 +34,7 @@ export default async function handler(req, res) {
         "X-Title": "Nassa Marketing Studio",
       },
       body: JSON.stringify({
-        model: "anthropic/claude-sonnet-4-5",
+        model: "google/gemma-4-31b-it",
         max_tokens,
         messages: [
           ...(system ? [{ role: "system", content: system }] : []),
